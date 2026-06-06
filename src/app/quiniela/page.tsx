@@ -24,6 +24,7 @@ export default function QuinielaPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [session, setSession] = useState<any>(null);
+  const [page, setPage] = useState(0); // Estado para paginación
   
   const isInitialized = useRef(false);
 
@@ -34,8 +35,6 @@ export default function QuinielaPage() {
     const loadInitialData = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        
-        // 1. Protección de ruta: Si no hay sesión, al login
         if (!session) {
           router.push("/login");
           return;
@@ -67,14 +66,15 @@ export default function QuinielaPage() {
         setIsLoading(false);
       }
     };
-
     loadInitialData();
   }, [supabase, router]);
+
+  // Resetear página al cambiar de grupo
+  useEffect(() => { setPage(0); }, [stepIndex]);
 
   const data = useMemo(() => {
     const groupsMap = new Map<string, Match[]>();
     const teamsSet = new Set<string>();
-
     matches.forEach(m => {
       const phase = (m.group_or_phase || "OTROS").toUpperCase();
       if (!groupsMap.has(phase)) groupsMap.set(phase, []);
@@ -82,27 +82,26 @@ export default function QuinielaPage() {
       if (m.home_team !== "TBD") teamsSet.add(m.home_team);
       if (m.away_team !== "TBD") teamsSet.add(m.away_team);
     });
-
     const sortedPhases = Array.from(groupsMap.keys()).sort();
     return { steps: ["CAMPEÓN", ...sortedPhases], groups: groupsMap, teams: Array.from(teamsSet).sort() };
   }, [matches]);
 
   const currentStep = data.steps[stepIndex] || "CAMPEÓN";
   const matchesToShow = data.groups.get(currentStep) || [];
+  
+  // Lógica de Paginación
+  const pageSize = 10;
+  const totalPages = Math.ceil(matchesToShow.length / pageSize);
+  const paginatedMatches = useMemo(() => matchesToShow.slice(page * pageSize, (page + 1) * pageSize), [matchesToShow, page]);
 
   const handlePredChange = (id: string, field: "home" | "away", val: string) => {
-    // 2. Bloqueo de negativos
     if (val !== "" && parseInt(val) < 0) return;
-    setPredictions(prev => ({ 
-      ...prev, 
-      [id]: { ...(prev[id] || { home: "", away: "" }), [field]: val } 
-    }));
+    setPredictions(prev => ({ ...prev, [id]: { ...(prev[id] || { home: "", away: "" }), [field]: val } }));
   };
 
   const saveCurrentPhase = async () => {
     setIsSaving(true);
     try {
-      // 3. Guardar Campeón
       if (currentStep === "CAMPEÓN") {
         const res = await fetch("/api/champion", {
           method: "POST",
@@ -114,19 +113,11 @@ export default function QuinielaPage() {
         return;
       }
 
-      // 4. Guardado inteligente: Solo enviar si ambos campos tienen valor
       const validPredictions = matchesToShow
         .filter(m => predictions[m.id]?.home !== "" && predictions[m.id]?.away !== "")
-        .map(m => ({
-          matchId: m.id,
-          home: parseInt(predictions[m.id].home),
-          away: parseInt(predictions[m.id].away)
-        }));
+        .map(m => ({ matchId: m.id, home: parseInt(predictions[m.id].home), away: parseInt(predictions[m.id].away) }));
 
-      if (validPredictions.length === 0) {
-        alert("No hay marcadores completados en esta fase.");
-        return;
-      }
+      if (validPredictions.length === 0) { alert("No hay cambios para guardar."); return; }
 
       const res = await fetch("/api/predictions", {
         method: "POST",
@@ -135,12 +126,9 @@ export default function QuinielaPage() {
       });
 
       if (!res.ok) throw new Error("Error al guardar");
-      alert(`¡${currentStep} guardado correctamente!`);
-    } catch (err: any) {
-      alert(err.message);
-    } finally {
-      setIsSaving(false);
-    }
+      alert(`¡${currentStep} guardado exitosamente!`);
+    } catch (err: any) { alert(err.message); }
+    finally { setIsSaving(false); }
   };
 
   if (isLoading) return <div className="p-10 text-center text-emerald-500 font-black animate-pulse">CARGANDO QUINIELA...</div>;
@@ -152,9 +140,7 @@ export default function QuinielaPage() {
         <nav className="flex gap-2 overflow-x-auto pb-4 scrollbar-hide border-b border-white/10">
           {data.steps.map((step, idx) => (
             <button key={step} onClick={() => setStepIndex(idx)}
-              className={`px-5 py-2 rounded-full whitespace-nowrap text-sm font-black transition-all ${
-                stepIndex === idx ? "bg-emerald-500 text-black shadow-[0_0_20px_rgba(16,185,129,0.4)]" : "bg-white/5 text-neutral-400 hover:bg-white/10"
-              }`}>
+              className={`px-5 py-2 rounded-full whitespace-nowrap text-sm font-black transition-all ${stepIndex === idx ? "bg-emerald-500 text-black" : "bg-white/5 text-neutral-400"}`}>
               {step.replace("GROUP ", "G")}
             </button>
           ))}
@@ -165,38 +151,44 @@ export default function QuinielaPage() {
         {currentStep === "CAMPEÓN" ? (
           <div className="bg-white/5 border border-white/10 rounded-[2rem] p-10 space-y-8">
             <h2 className="text-5xl font-black italic">🏆 EL CAMPEÓN</h2>
-            <select value={championTeam} onChange={(e) => setChampionTeam(e.target.value)} 
-              className="w-full bg-neutral-900 p-5 rounded-2xl border border-white/10 text-xl font-bold outline-none">
+            <select value={championTeam} onChange={(e) => setChampionTeam(e.target.value)} className="w-full bg-neutral-900 p-5 rounded-2xl border border-white/10 text-xl font-bold">
               <option value="">Selecciona tu favorito...</option>
               {data.teams.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
-            <button onClick={saveCurrentPhase} disabled={isSaving} className="w-full bg-emerald-500 text-black font-black py-5 rounded-2xl text-xl hover:bg-emerald-400">
-              {isSaving ? "GUARDANDO..." : "GUARDAR CAMPEÓN"}
-            </button>
+            <button onClick={saveCurrentPhase} className="w-full bg-emerald-500 text-black font-black py-5 rounded-2xl text-xl">GUARDAR CAMPEÓN</button>
           </div>
         ) : (
           <div className="space-y-8">
             <h2 className="text-4xl font-black uppercase italic tracking-tighter">{currentStep.replace("GROUP", "GRUPO")}</h2>
             <div className="grid gap-4">
-              {matchesToShow.map((match) => (
+              {paginatedMatches.map((match) => (
                 <div key={match.id} className="grid grid-cols-[1fr_auto_1fr] items-center p-5 rounded-[1.5rem] bg-white/5 border border-white/10">
                   <div className="flex items-center justify-end gap-4">
-                    <span className="font-black text-sm md:text-lg text-right">{match.home_team}</span>
-                    {match.home_logo_url && <img src={match.home_logo_url} className="w-10 h-10 object-contain" alt="" />}
+                    <span className="font-black text-sm md:text-lg">{match.home_team}</span>
+                    {match.home_logo_url && <img src={match.home_logo_url} className="w-10 h-10 object-contain" />}
                   </div>
                   <div className="flex items-center gap-3 bg-neutral-950 rounded-2xl p-2 border border-white/5 mx-4">
-                    <input type="number" min="0" placeholder="0" value={predictions[match.id]?.home || ""} onChange={(e) => handlePredChange(match.id, "home", e.target.value)} className="w-12 h-12 text-center bg-transparent font-black text-2xl text-emerald-500 outline-none" />
-                    <span className="text-neutral-800 font-black text-xs">VS</span>
-                    <input type="number" min="0" placeholder="0" value={predictions[match.id]?.away || ""} onChange={(e) => handlePredChange(match.id, "away", e.target.value)} className="w-12 h-12 text-center bg-transparent font-black text-2xl text-emerald-500 outline-none" />
+                    <input type="number" min="0" value={predictions[match.id]?.home || ""} onChange={(e) => handlePredChange(match.id, "home", e.target.value)} className="w-12 h-12 text-center bg-transparent font-black text-2xl text-emerald-500 outline-none" />
+                    <span className="text-neutral-800">VS</span>
+                    <input type="number" min="0" value={predictions[match.id]?.away || ""} onChange={(e) => handlePredChange(match.id, "away", e.target.value)} className="w-12 h-12 text-center bg-transparent font-black text-2xl text-emerald-500 outline-none" />
                   </div>
                   <div className="flex items-center justify-start gap-4">
-                    {match.away_logo_url && <img src={match.away_logo_url} className="w-10 h-10 object-contain" alt="" />}
-                    <span className="font-black text-sm md:text-lg text-left">{match.away_team}</span>
+                    {match.away_logo_url && <img src={match.away_logo_url} className="w-10 h-10 object-contain" />}
+                    <span className="font-black text-sm md:text-lg">{match.away_team}</span>
                   </div>
                 </div>
               ))}
             </div>
-            <button onClick={saveCurrentPhase} disabled={isSaving} className="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-black py-5 rounded-2xl text-xl transition-all">
+
+            {totalPages > 1 && (
+              <div className="flex items-center justify-center gap-4">
+                <button disabled={page === 0} onClick={() => setPage(p => p - 1)} className="px-6 py-2 bg-white/10 rounded-full font-black">ANTERIOR</button>
+                <span className="font-black text-emerald-500">{page + 1} / {totalPages}</span>
+                <button disabled={page === totalPages - 1} onClick={() => setPage(p => p + 1)} className="px-6 py-2 bg-white/10 rounded-full font-black">SIGUIENTE</button>
+              </div>
+            )}
+
+            <button onClick={saveCurrentPhase} disabled={isSaving} className="w-full bg-emerald-500 text-black font-black py-5 rounded-2xl text-xl">
               {isSaving ? "GUARDANDO..." : `GUARDAR ${currentStep.replace("GROUP", "GRUPO")}`}
             </button>
           </div>

@@ -20,7 +20,3 @@ export function getSupabaseClient(): SupabaseClient {
 
   return createClient(url, anonKey);
 }
-
-
-
-

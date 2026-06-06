@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseClient } from "@/lib/supabaseClient";
-import { apiFootballGet, ApiFootballFixture } from "@/lib/apiFootball";
-
-// Evitamos el cache para tener datos en tiempo real
-export const revalidate = 0;
+import { apiFootballGet } from "@/lib/apiFootball";
 
 function unauthorized() {
   return NextResponse.json({ message: "No autorizado" }, { status: 401 });
@@ -22,72 +19,53 @@ export async function GET(request: Request) {
   }
 
   const supabase = getSupabaseClient();
-  const LEAGUE_ID = 1; // FIFA World Cup
-  const SEASON = 2026;
 
   try {
-    // 2. Intento A: Búsqueda estándar por Liga y Temporada
-    let apiResponse = await apiFootballGet<ApiFootballFixture>("/fixtures", {
-      league: LEAGUE_ID,
-      season: SEASON,
-    });
+    // 2. Llamada a la API de Football-Data
+    const data = await apiFootballGet("/competitions/WC/matches");
+    const matches = data.matches;
 
-    // 3. Intento B: Si el A falla, buscamos los próximos 99 partidos de la liga
-    if (!apiResponse.response || apiResponse.response.length === 0) {
-      console.log("Temporada no encontrada, intentando con parámetro 'next'...");
-      apiResponse = await apiFootballGet<ApiFootballFixture>("/fixtures", {
-        league: LEAGUE_ID,
-        next: 99,
+    if (!matches || !Array.isArray(matches)) {
+      return NextResponse.json({ 
+        ok: false, 
+        message: "No se encontraron partidos o formato inválido" 
       });
     }
 
-    if (!apiResponse.response || apiResponse.response.length === 0) {
-      return NextResponse.json({
-        ok: true,
-        imported: 0,
-        message: `La API de Football aún no devuelve partidos para la liga ${LEAGUE_ID}.`,
-      });
-    }
+    // 3. Mapeo de datos con protecciones contra nulls
+    const rows = matches.map((m: any) => ({
+      external_id: String(m.id),
+      // Si el nombre es null, usamos "TBD" para evitar violar el NOT NULL de la BD
+      home_team: m.homeTeam?.name ?? "TBD",
+      away_team: m.awayTeam?.name ?? "TBD",
+      home_logo_url: m.homeTeam?.crest ?? null,
+      away_logo_url: m.awayTeam?.crest ?? null,
+      group_or_phase: m.stage ?? "N/A",
+      kickoff_at: m.utcDate,
+      home_score: m.score?.fullTime?.home ?? null,
+      away_score: m.score?.fullTime?.away ?? null,
+      status: m.status ?? "TIMED",
+      source: "football-data",
+      external_league: "WC",
+      external_season: m.season?.startDate ? m.season.startDate.split('-')[0] : "2026",
+    }));
 
-    // 4. Mapeo de datos
-    const rows = apiResponse.response.map((fx) => {
-      const status = fx.fixture.status.short;
-      
-      const activeStatuses = ["1H", "2H", "ET", "P", "LIVE", "FT", "PEN", "AET"];
-      const isStarted = activeStatuses.includes(status);
-
-      return {
-        external_id: String(fx.fixture.id),
-        home_team: fx.teams.home.name,
-        away_team: fx.teams.away.name,
-        home_logo_url: fx.teams.home.logo ?? null,
-        away_logo_url: fx.teams.away.logo ?? null,
-        group_or_phase: `${fx.league.round}`, 
-        kickoff_at: fx.fixture.date,
-        home_score: isStarted ? (fx.goals.home ?? 0) : null,
-        away_score: isStarted ? (fx.goals.away ?? 0) : null,
-        status: status,
-        source: "api-football",
-        external_league: fx.league.id,
-        external_season: fx.league.season,
-      };
-    });
-
-    // 5. Upsert masivo en Supabase
-    // --- CORRECCIÓN AQUÍ: Usamos casting 'as any' para evitar el error de compilación ---
+    // 4. Upsert masivo en Supabase
+    // Nota: Asegúrate de que external_league sea tipo TEXT en Supabase como hablamos antes
     const { error: upsertError } = await (supabase.from("matches") as any)
       .upsert(rows, { 
         onConflict: "source,external_id" 
       });
 
     if (upsertError) {
-      throw new Error(`Error en Supabase: ${upsertError.message}`);
+      console.error("Error detalle Supabase:", upsertError);
+      throw new Error(upsertError.message);
     }
 
     return NextResponse.json({
       ok: true,
       imported: rows.length,
-      message: "Sincronización completada exitosamente",
+      message: "Sincronización completada",
       timestamp: new Date().toISOString(),
     });
 

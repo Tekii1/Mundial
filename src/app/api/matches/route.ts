@@ -6,12 +6,10 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   const supabase = getSupabaseClient();
 
-  const { data, error } = await supabase
-    .from("matches")
-    .select(
-      "id, home_team, away_team, group_or_phase, kickoff_at, home_score, away_score, home_logo_url, away_logo_url"
-    )
-    .order("kickoff_at", { ascending: true });
+ const { data, error } = await supabase
+  .from("matches")
+  .select("*") // Cambiamos de lista específica a asterisco
+  .order("kickoff_at", { ascending: true });
 
   if (error) {
     // En caso de error devolvemos un 500 con el mensaje para depuración

@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 
-// Página sencilla de autenticación con email y contraseña usando Supabase Auth
 export default function AuthPage() {
   const supabase = getSupabaseClient();
   const router = useRouter();
@@ -16,36 +15,22 @@ export default function AuthPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  // Envía un correo para restablecer la contraseña del usuario
   const handleResetPassword = async () => {
     setMessage(null);
-
     if (!email) {
       setMessage("Ingresa tu correo para enviar el enlace de recuperación.");
       return;
     }
 
     try {
-      const origin =
-        typeof window !== "undefined" ? window.location.origin : "";
-
+      const origin = typeof window !== "undefined" ? window.location.origin : "";
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${origin}/auth/callback`,
       });
-
-      if (error) {
-        throw error;
-      }
-
-      setMessage(
-        "Te enviamos un correo con instrucciones para restablecer tu contraseña."
-      );
-    } catch (err) {
-      setMessage(
-        err instanceof Error
-          ? `No se pudo enviar el correo de recuperación: ${err.message}`
-          : "Error desconocido al intentar enviar el correo de recuperación."
-      );
+      if (error) throw error;
+      setMessage("Te enviamos un correo con instrucciones para restablecer tu contraseña.");
+    } catch (err: any) {
+      setMessage(`No se pudo enviar el correo de recuperación: ${err.message}`);
     }
   };
 
@@ -57,7 +42,6 @@ export default function AuthPage() {
       return;
     }
 
-    // El alias solo es obligatorio al crear cuenta
     if (mode === "register" && !username.trim()) {
       setMessage("Por favor elige un alias o nombre para mostrar.");
       return;
@@ -67,61 +51,34 @@ export default function AuthPage() {
       setIsSubmitting(true);
 
       if (mode === "register") {
-        // Registro de nuevo usuario con email/contraseña
+        // MODIFICACIÓN: Pasamos el nombre en options.data para que el Trigger lo procese
         const { error } = await supabase.auth.signUp({
           email,
           password,
+          options: {
+            data: { name: username.trim() },
+          },
         });
 
-        if (error) {
-          throw error;
-        }
-
-        // Guardamos el alias elegido como nombre para mostrar en la quiniela
-        if (typeof window !== "undefined" && username.trim()) {
-          window.localStorage.setItem(
-            "quinielaUserName",
-            username.trim()
-          );
-        }
+        if (error) throw error;
 
         setMessage(
           "Registro exitoso. Revisa tu correo si se requiere confirmación y luego inicia sesión."
         );
       } else {
-        // Inicio de sesión con email/contraseña
         const { error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
 
-        if (error) {
-          throw error;
-        }
+        if (error) throw error;
 
-        // Si aún no hay alias guardado en este navegador, usamos una derivación del correo
-        if (typeof window !== "undefined") {
-          const existing = window.localStorage.getItem("quinielaUserName");
-          if (!existing || !existing.trim()) {
-            const fallbackAlias =
-              email.split("@")[0]?.trim() || email.trim();
-            window.localStorage.setItem("quinielaUserName", fallbackAlias);
-          }
-          // Hacemos un refresh completo para que el layout recoja el alias sin problemas
-          window.location.href = "/";
-          return;
-        }
-
-        // En entornos donde window no esté disponible, usamos navegación clásica
-        setMessage("Has iniciado sesión correctamente. Ya puedes ir a tu quiniela.");
+        // Éxito al iniciar sesión
         router.push("/");
+        router.refresh(); 
       }
-    } catch (err) {
-      setMessage(
-        err instanceof Error
-          ? `Error de autenticación: ${err.message}`
-          : "Error desconocido durante la autenticación."
-      );
+    } catch (err: any) {
+      setMessage(`Error de autenticación: ${err.message}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -134,8 +91,7 @@ export default function AuthPage() {
           {mode === "login" ? "Iniciar sesión" : "Crear cuenta"}
         </h1>
         <p className="text-sm text-neutral-300">
-          Usa tu correo para identificar tus quinielas. Más adelante podremos
-          mostrar tu ranking y tus predicciones asociadas a este usuario.
+          Usa tu correo para identificar tus quinielas.
         </p>
       </header>
 
@@ -152,9 +108,6 @@ export default function AuthPage() {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
             />
-            <p className="text-[11px] text-neutral-400">
-              Este alias se usará como tu nombre en la quiniela.
-            </p>
           </div>
         )}
 
@@ -188,32 +141,24 @@ export default function AuthPage() {
           type="button"
           disabled={isSubmitting}
           onClick={handleSubmit}
-          className="mt-2 inline-flex w-full items-center justify-center rounded-full bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-neutral-950 shadow-lg shadow-emerald-500/25 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
+          className="mt-2 inline-flex w-full items-center justify-center rounded-full bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-neutral-950 shadow-lg shadow-emerald-500/25 transition hover:bg-emerald-400 disabled:opacity-60"
         >
           {isSubmitting
-            ? mode === "login"
-              ? "Iniciando sesión..."
-              : "Creando cuenta..."
-            : mode === "login"
-            ? "Iniciar sesión"
-            : "Crear cuenta"}
+            ? mode === "login" ? "Iniciando..." : "Creando cuenta..."
+            : mode === "login" ? "Iniciar sesión" : "Crear cuenta"}
         </button>
 
         {mode === "login" && (
           <button
             type="button"
             onClick={handleResetPassword}
-            className="mt-2 text-xs text-neutral-400 hover:text-neutral-200"
+            className="block w-full text-center text-xs text-neutral-400 hover:text-neutral-200"
           >
             ¿Olvidaste tu contraseña?
           </button>
         )}
 
-        {message && (
-          <p className="text-xs text-neutral-300">
-            {message}
-          </p>
-        )}
+        {message && <p className="text-xs text-emerald-400 text-center">{message}</p>}
       </div>
 
       <button
@@ -222,7 +167,7 @@ export default function AuthPage() {
           setMessage(null);
           setMode(mode === "login" ? "register" : "login");
         }}
-        className="self-start text-xs text-neutral-400 hover:text-neutral-200"
+        className="text-xs text-neutral-400 hover:text-neutral-200"
       >
         {mode === "login"
           ? "¿No tienes cuenta? Crear una nueva"
@@ -231,4 +176,3 @@ export default function AuthPage() {
     </section>
   );
 }
-

@@ -1,10 +1,23 @@
-import Link from "next/link";
+"use client";
 
-// Página de inicio: landing con explicación general y accesos a quiniela y ranking
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { getSupabaseClient } from "@/lib/supabaseClient";
+
 export default function Home() {
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
+  const supabase = getSupabaseClient();
+
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      setIsLoggedIn(!!session);
+    };
+    checkSession();
+  }, [supabase]);
+
   return (
     <section className="flex flex-1 flex-col justify-center gap-10">
-      {/* Bloque principal con título y descripción de la app */}
       <div className="max-w-2xl space-y-4">
         <p className="text-sm font-medium uppercase tracking-[0.25em] text-emerald-400">
           Mundial 2026
@@ -18,13 +31,13 @@ export default function Home() {
         </p>
       </div>
 
-      {/* Accesos rápidos a las secciones principales */}
       <div className="flex flex-col gap-3 sm:flex-row">
+        {/* El botón cambia según si el usuario ha iniciado sesión o no */}
         <Link
-          href="/quiniela"
+          href={isLoggedIn ? "/quiniela" : "/auth"}
           className="inline-flex items-center justify-center rounded-full bg-emerald-500 px-6 py-2.5 text-sm font-semibold text-neutral-950 shadow-lg shadow-emerald-500/25 transition hover:bg-emerald-400"
         >
-          Empieza tu quiniela
+          {isLoggedIn ? "Ir a mi quiniela" : "Empieza tu quiniela"}
         </Link>
         <Link
           href="/ranking"
@@ -34,25 +47,19 @@ export default function Home() {
         </Link>
       </div>
 
-      {/* Tarjetas con resumen de funcionalidades principales */}
       <div className="mt-6 grid gap-4 text-sm text-neutral-300 sm:grid-cols-3">
+        {/* Tus tarjetas se mantienen igual... */}
         <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
           <p className="font-semibold text-neutral-50">Predicciones simples</p>
-          <p className="mt-1 text-xs text-neutral-300">
-            Define marcadores para cada partido y guarda todo en una sola vista.
-          </p>
+          <p className="mt-1 text-xs text-neutral-300">Define marcadores para cada partido.</p>
         </div>
         <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
           <p className="font-semibold text-neutral-50">Ranking automático</p>
-          <p className="mt-1 text-xs text-neutral-300">
-            Calcula los puntos por aciertos y muestra la tabla de posiciones.
-          </p>
+          <p className="mt-1 text-xs text-neutral-300">Tabla de posiciones en tiempo real.</p>
         </div>
         <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
           <p className="font-semibold text-neutral-50">Pensado para familia</p>
-          <p className="mt-1 text-xs text-neutral-300">
-            Interfaz sencilla, sin registro complicado ni cosas raras.
-          </p>
+          <p className="mt-1 text-xs text-neutral-300">Interfaz sencilla y rápida.</p>
         </div>
       </div>
     </section>

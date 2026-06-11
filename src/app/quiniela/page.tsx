@@ -14,7 +14,7 @@ type Match = {
   away_logo_url: string | null;
 };
 
-// --- Componentes Memoizados (Optimización de Rendimiento) ---
+// --- Componentes Memoizados ---
 
 const MatchRow = memo(({ match, prediction, onChange }: any) => (
   <div className="grid grid-cols-[1fr_auto_1fr] items-center p-5 rounded-[1.5rem] bg-white/5 border border-white/10">
@@ -23,9 +23,21 @@ const MatchRow = memo(({ match, prediction, onChange }: any) => (
       {match.home_logo_url && <img src={match.home_logo_url} className="w-10 h-10 object-contain" alt="" />}
     </div>
     <div className="flex items-center gap-3 bg-neutral-950 rounded-2xl p-2 border border-white/5 mx-4">
-      <input type="number" min="0" value={prediction?.home || ""} onChange={(e) => onChange(match.id, "home", e.target.value)} className="w-12 h-12 text-center bg-transparent font-black text-2xl text-emerald-500 outline-none" />
+      <input 
+        type="number" 
+        min="0" 
+        value={prediction?.home ?? ""} 
+        onChange={(e) => onChange(match.id, "home", e.target.value)} 
+        className="w-12 h-12 text-center bg-transparent font-black text-2xl text-emerald-500 outline-none" 
+      />
       <span className="text-neutral-800">VS</span>
-      <input type="number" min="0" value={prediction?.away || ""} onChange={(e) => onChange(match.id, "away", e.target.value)} className="w-12 h-12 text-center bg-transparent font-black text-2xl text-emerald-500 outline-none" />
+      <input 
+        type="number" 
+        min="0" 
+        value={prediction?.away ?? ""} 
+        onChange={(e) => onChange(match.id, "away", e.target.value)} 
+        className="w-12 h-12 text-center bg-transparent font-black text-2xl text-emerald-500 outline-none" 
+      />
     </div>
     <div className="flex items-center justify-start gap-4">
       {match.away_logo_url && <img src={match.away_logo_url} className="w-10 h-10 object-contain" alt="" />}
@@ -99,7 +111,7 @@ export default function QuinielaPage() {
       const [matchesData, predsData, championData] = await Promise.all([mRes.json(), pRes.json(), cRes.json()]);
       setMatches(matchesData || []);
       setChampionTeam(championData?.championTeam || "");
-      const formatted = predsData.reduce((acc: any, p: any) => ({
+      const formatted = (predsData || []).reduce((acc: any, p: any) => ({
         ...acc,
         [p.match_id]: { home: p.predicted_home_score?.toString() || "", away: p.predicted_away_score?.toString() || "" }
       }), {});
@@ -154,15 +166,42 @@ export default function QuinielaPage() {
     try {
       if (currentStep === "CAMPEÓN") {
         await fetch("/api/champion", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session.access_token}` }, body: JSON.stringify({ championTeam }) });
-        alert("¡Campeón guardado!"); return;
+        alert("¡Campeón guardado!"); 
+        setIsSaving(false);
+        return;
       }
+      
       const validPredictions = matchesToShow
-        .filter(m => predictions[m.id]?.home !== "" && predictions[m.id]?.away !== "")
-        .map(m => ({ matchId: m.id, home: parseInt(predictions[m.id].home), away: parseInt(predictions[m.id].away) }));
-      if (validPredictions.length === 0) { alert("Completa al menos un partido."); return; }
-      await fetch("/api/predictions", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session.access_token}` }, body: JSON.stringify({ predictions: validPredictions }) });
+        .filter(m => {
+          const pred = predictions[m.id];
+          return pred && pred.home !== "" && pred.away !== "";
+        })
+        .map(m => ({ 
+          matchId: m.id, 
+          home: parseInt(predictions[m.id].home), 
+          away: parseInt(predictions[m.id].away) 
+        }));
+
+      if (validPredictions.length === 0) { 
+        alert("Completa al menos un partido."); 
+        setIsSaving(false); 
+        return; 
+      }
+      
+      const res = await fetch("/api/predictions", { 
+        method: "POST", 
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session.access_token}` }, 
+        body: JSON.stringify({ predictions: validPredictions }) 
+      });
+      
+      if (!res.ok) throw new Error("Error al guardar en servidor");
+      
       alert(`¡${currentStep} guardado!`);
-    } catch (err: any) { alert(err.message); } finally { setIsSaving(false); }
+    } catch (err: any) { 
+      alert(err.message); 
+    } finally { 
+      setIsSaving(false); 
+    }
   };
 
   if (isLoading) return <div className="p-10 text-center text-emerald-500 font-black animate-pulse">CARGANDO QUINIELA...</div>;
@@ -171,7 +210,6 @@ export default function QuinielaPage() {
   return (
     <section className="max-w-4xl mx-auto p-4 space-y-8 text-white pb-32">
       <header className="space-y-6">
-        {/* Navegación forzada con <a> para liberar memoria */}
         <a href="/" className="inline-block text-sm text-neutral-400 hover:text-emerald-500 transition-colors">
           ← VOLVER AL INICIO
         </a>

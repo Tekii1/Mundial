@@ -1,11 +1,8 @@
 {
   "crons": [
     {
-      "path": "/api/sync-results",
-      "schedule": "0 0 * * *",
-      "headers": {
-        "x-sync-secret": "Okamura28@"
-      }
+      "path": "/api/sync-results?secret=Okamura28@",
+      "schedule": "0 0 * * *"
     }
   ]
 }

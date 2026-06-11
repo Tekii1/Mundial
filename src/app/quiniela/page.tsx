@@ -171,19 +171,22 @@ export default function QuinielaPage() {
         return;
       }
       
+      // Procesamiento seguro: solo tomamos predicciones que tengan datos válidos
       const validPredictions = matchesToShow
-        .filter(m => {
+        .reduce((acc: any[], m) => {
           const pred = predictions[m.id];
-          return pred && pred.home !== "" && pred.away !== "";
-        })
-        .map(m => ({ 
-          matchId: m.id, 
-          home: parseInt(predictions[m.id].home), 
-          away: parseInt(predictions[m.id].away) 
-        }));
+          if (pred && pred.home !== "" && pred.away !== "") {
+            acc.push({ 
+              matchId: m.id, 
+              home: parseInt(pred.home), 
+              away: parseInt(pred.away) 
+            });
+          }
+          return acc;
+        }, []);
 
       if (validPredictions.length === 0) { 
-        alert("Completa al menos un partido."); 
+        alert("Completa al menos un partido para guardar."); 
         setIsSaving(false); 
         return; 
       }

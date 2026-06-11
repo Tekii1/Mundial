@@ -1,8 +1,19 @@
 import { NextResponse } from "next/server";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 
+// Define la fecha límite: 11 de junio de 2026 a las 12:00 UTC
+const DEADLINE = new Date("2026-06-11T12:00:00Z");
+
 // --- MÉTODO POST (Guardar Campeón) ---
 export async function POST(request: Request) {
+  // 1. Verificación de seguridad: Bloqueo de fecha
+  if (new Date() > DEADLINE) {
+    return NextResponse.json(
+      { message: "Ya no se permiten cambios de campeón. El Mundial ya comenzó." }, 
+      { status: 403 }
+    );
+  }
+
   const supabase = getSupabaseClient();
   const body = await request.json();
   const auth = request.headers.get("authorization") ?? "";
@@ -15,7 +26,6 @@ export async function POST(request: Request) {
 
   const { championTeam } = body;
 
-  // Forzamos el tipo 'any' para evitar el error de 'never'
   const { data: user } = await (supabase
     .from("users")
     .select("id")
@@ -45,7 +55,6 @@ export async function GET(request: Request) {
   const { data: authData } = await supabase.auth.getUser(token);
   if (!authData.user) return NextResponse.json({ message: "No user" }, { status: 401 });
 
-  // APLICAMOS EL MISMO CAMBIO AQUÍ PARA EL GET
   const { data: user } = await (supabase
     .from("users")
     .select("id")
@@ -54,7 +63,6 @@ export async function GET(request: Request) {
 
   if (!user) return NextResponse.json({ championTeam: null });
 
-  // Usamos 'as any' en la tabla tournament_predictions también
   const { data: existingPrediction, error } = await (supabase
     .from("tournament_predictions") as any)
     .select("champion_team")

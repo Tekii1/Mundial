@@ -14,49 +14,65 @@ type Match = {
   away_logo_url: string | null;
 };
 
+// Fecha límite global: 11 de junio de 2026 a las 12:00 UTC
+const DEADLINE = new Date("2026-06-11T12:00:00Z");
+
 // --- Componentes Memoizados ---
 
-const MatchRow = memo(({ match, prediction, onChange }: any) => (
-  <div className="grid grid-cols-[1fr_auto_1fr] items-center p-5 rounded-[1.5rem] bg-white/5 border border-white/10">
-    <div className="flex items-center justify-end gap-4">
-      <span className="font-black text-sm md:text-lg">{match.home_team}</span>
-      {match.home_logo_url && <img src={match.home_logo_url} className="w-10 h-10 object-contain" alt="" />}
+const MatchRow = memo(({ match, prediction, onChange }: any) => {
+  const isLocked = new Date() > new Date(match.kickoff_at);
+  return (
+    <div className={`grid grid-cols-[1fr_auto_1fr] items-center p-5 rounded-[1.5rem] bg-white/5 border border-white/10 ${isLocked ? "opacity-60" : ""}`}>
+      <div className="flex items-center justify-end gap-4">
+        <span className="font-black text-sm md:text-lg">{match.home_team}</span>
+        {match.home_logo_url && <img src={match.home_logo_url} className="w-10 h-10 object-contain" alt="" />}
+      </div>
+      <div className="flex items-center gap-3 bg-neutral-950 rounded-2xl p-2 border border-white/5 mx-4">
+        <input 
+          type="number" 
+          min="0" 
+          disabled={isLocked}
+          value={prediction?.home ?? ""} 
+          onChange={(e) => onChange(match.id, "home", e.target.value)} 
+          className="w-12 h-12 text-center bg-transparent font-black text-2xl text-emerald-500 outline-none disabled:text-neutral-600" 
+        />
+        <span className="text-neutral-800">VS</span>
+        <input 
+          type="number" 
+          min="0" 
+          disabled={isLocked}
+          value={prediction?.away ?? ""} 
+          onChange={(e) => onChange(match.id, "away", e.target.value)} 
+          className="w-12 h-12 text-center bg-transparent font-black text-2xl text-emerald-500 outline-none disabled:text-neutral-600" 
+        />
+      </div>
+      <div className="flex items-center justify-start gap-4">
+        {match.away_logo_url && <img src={match.away_logo_url} className="w-10 h-10 object-contain" alt="" />}
+        <span className="font-black text-sm md:text-lg">{match.away_team}</span>
+      </div>
     </div>
-    <div className="flex items-center gap-3 bg-neutral-950 rounded-2xl p-2 border border-white/5 mx-4">
-      <input 
-        type="number" 
-        min="0" 
-        value={prediction?.home ?? ""} 
-        onChange={(e) => onChange(match.id, "home", e.target.value)} 
-        className="w-12 h-12 text-center bg-transparent font-black text-2xl text-emerald-500 outline-none" 
-      />
-      <span className="text-neutral-800">VS</span>
-      <input 
-        type="number" 
-        min="0" 
-        value={prediction?.away ?? ""} 
-        onChange={(e) => onChange(match.id, "away", e.target.value)} 
-        className="w-12 h-12 text-center bg-transparent font-black text-2xl text-emerald-500 outline-none" 
-      />
-    </div>
-    <div className="flex items-center justify-start gap-4">
-      {match.away_logo_url && <img src={match.away_logo_url} className="w-10 h-10 object-contain" alt="" />}
-      <span className="font-black text-sm md:text-lg">{match.away_team}</span>
-    </div>
-  </div>
-));
+  );
+});
 MatchRow.displayName = "MatchRow";
 
-const ChampionSelector = memo(({ value, teams, onChange, onSave }: any) => (
-  <div className="bg-white/5 border border-white/10 rounded-[2rem] p-10 space-y-8">
-    <h2 className="text-5xl font-black italic">🏆 EL CAMPEÓN</h2>
-    <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full bg-neutral-900 p-5 rounded-2xl border border-white/10 text-xl font-bold cursor-pointer">
-      <option value="">Selecciona tu favorito...</option>
-      {teams.map((t: string) => <option key={t} value={t}>{t}</option>)}
-    </select>
-    <button onClick={onSave} className="w-full bg-emerald-500 text-black font-black py-5 rounded-2xl text-xl hover:bg-emerald-400 transition-colors">GUARDAR CAMPEÓN</button>
-  </div>
-));
+const ChampionSelector = memo(({ value, teams, onChange, onSave }: any) => {
+  const isLocked = new Date() > DEADLINE;
+  return (
+    <div className="bg-white/5 border border-white/10 rounded-[2rem] p-10 space-y-8">
+      <h2 className="text-5xl font-black italic">🏆 EL CAMPEÓN</h2>
+      {isLocked && (
+        <div className="bg-red-500/20 text-red-500 p-4 rounded-xl text-center font-bold">🚫 El plazo para elegir campeón ha finalizado.</div>
+      )}
+      <select disabled={isLocked} value={value} onChange={(e) => onChange(e.target.value)} className="w-full bg-neutral-900 p-5 rounded-2xl border border-white/10 text-xl font-bold cursor-pointer disabled:opacity-50">
+        <option value="">Selecciona tu favorito...</option>
+        {teams.map((t: string) => <option key={t} value={t}>{t}</option>)}
+      </select>
+      {!isLocked && (
+        <button onClick={onSave} className="w-full bg-emerald-500 text-black font-black py-5 rounded-2xl text-xl hover:bg-emerald-400 transition-colors">GUARDAR CAMPEÓN</button>
+      )}
+    </div>
+  );
+});
 ChampionSelector.displayName = "ChampionSelector";
 
 const MatchList = memo(({ matches, predictions, onPredChange, onSave, phaseName, isSaving }: any) => (
@@ -171,7 +187,6 @@ export default function QuinielaPage() {
         return;
       }
       
-      // Procesamiento seguro: solo tomamos predicciones que tengan datos válidos
       const validPredictions = matchesToShow
         .reduce((acc: any[], m) => {
           const pred = predictions[m.id];

@@ -84,19 +84,26 @@ let userId = userRecord?.id;
     }, { status: 403 });
   }
 
-  // 6. Hacer el UPSERT
-  // CORRECCIÓN: as any para la tabla y los datos
+// 6. Hacer el UPSERT
   const { error: upsertError } = await (supabase.from("predictions") as any)
-    .upsert(validRows, { onConflict: "user_id,match_id" });
+    .upsert(validRows, { 
+      onConflict: "user_id,match_id",
+      ignoreDuplicates: false // Asegura que sobrescriba con los nuevos valores
+    });
 
   if (upsertError) {
-    return NextResponse.json({ error: upsertError.message }, { status: 500 });
+    console.error("Upsert error:", upsertError); // Útil para debug en logs
+    return NextResponse.json({ error: "Error al guardar en base de datos" }, { status: 500 });
   }
 
+  // Si intentaron guardar algunos bloqueados y otros válidos, informamos ambos
   return NextResponse.json({ 
     ok: true, 
     savedCount: validRows.length,
-    blockedCount: blockedMatches.length 
+    blockedCount: blockedMatches.length,
+    message: blockedMatches.length > 0 
+      ? `Se guardaron ${validRows.length}, pero ${blockedMatches.length} partidos ya habían iniciado.` 
+      : "Predicciones guardadas correctamente."
   });
 }
 

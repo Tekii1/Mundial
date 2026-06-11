@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/sync-results",
-      "schedule": "*/10 * * * *",
+      "schedule": "0 0 * * *",
       "headers": {
         "x-sync-secret": "Okamura28@"
       }
